@@ -15,138 +15,121 @@ import gzip
 
 import requests
 
-def search(bot, cookies):
+def scrape_restaurants(driver, browser_cookies):
 
-    restaurant_data = []
-    bot.get('https://food.grab.com/sg/en/')  
+    restaurant_info = []
+    driver.get('https://food.grab.com/sg/en/')  
     time.sleep(2)
 
-    for name, value in cookies.items():
-        bot.add_cookie({"name": name, "value": value})
+    for key, val in browser_cookies.items():
+        driver.add_cookie({"name": key, "value": val})
     time.sleep(2)
 
-    bot.refresh() 
+    driver.refresh() 
 
-    search_button = WebDriverWait(bot, 60).until(EC.element_to_be_clickable(
+    search_btn = WebDriverWait(driver, 60).until(EC.element_to_be_clickable(
         (By.XPATH, "/html/body/div[1]/div[2]/div[3]/div[3]/div/button")))
-    search_button.click()
+    search_btn.click()
 
     time.sleep(10)
 
-    count = 0   
+    element_count = 0   
 
-    for i in range(0, 20): 
+    for i in range(20): 
 
-        i += 1  
-
-        restaurant_elements = WebDriverWait(bot, 60).until(
+        restaurant_elements = WebDriverWait(driver, 60).until(
             EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.RestaurantListCol___1FZ8V")))
 
-        last_restaurant_element = restaurant_elements[-1]
-        bot.execute_script(
-            "arguments[0].scrollIntoView();", last_restaurant_element)
+        last_element = restaurant_elements[-1]
+        driver.execute_script("arguments[0].scrollIntoView();", last_element)
         time.sleep(5)
 
-        for restaurant_element in restaurant_elements[count:]:
-            count = count+1
+        for restaurant in restaurant_elements[element_count:]:
+            element_count += 1
             try:
-                restaurant_cuisine = restaurant_element.find_element(
-                    By.CSS_SELECTOR, "div.basicInfoRow___UZM8d").text
-                restaurant_name = restaurant_element.find_element(
-                    By.CSS_SELECTOR, "p.name___2epcT").text
-                rating = restaurant_element.find_element(
-                    By.CSS_SELECTOR, "div.numbersChild___2qKMV:nth-child(1)").text
-                duration_distance = restaurant_element.find_element(
-                    By.CSS_SELECTOR, "div.numbersChild___2qKMV:nth-child(2)").text
-                image_element = WebDriverWait(bot, 5).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "img.show___3oA6B")))
-                image_url = image_element.get_attribute("src")
-                restaurant_id = restaurant_element.find_element(
-                    By.CSS_SELECTOR, "a").get_attribute("href").split('/')[-1][:-1]
+                cuisine_type = restaurant.find_element(By.CSS_SELECTOR, "div.basicInfoRow___UZM8d").text
+                restaurant_name = restaurant.find_element(By.CSS_SELECTOR, "p.name___2epcT").text
+                rating_value = restaurant.find_element(By.CSS_SELECTOR, "div.numbersChild___2qKMV:nth-child(1)").text
+                duration_dist = restaurant.find_element(By.CSS_SELECTOR, "div.numbersChild___2qKMV:nth-child(2)").text
+                image_elem = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, "img.show___3oA6B")))
+                image_src = image_elem.get_attribute("src")
+                restaurant_id = restaurant.find_element(By.CSS_SELECTOR, "a").get_attribute("href").split('/')[-1][:-1]
 
-                url = "https://portal.grab.com/foodweb/v2/merchants/{}?latlng=1.396364,103.747462".format(
-                    restaurant_id)
-                response = requests.get(url)
+                api_url = f"https://portal.grab.com/foodweb/v2/merchants/{restaurant_id}?latlng=1.396364,103.747462"
+                api_response = requests.get(api_url)
 
-                if response.status_code == 200:
-                    soup = json.loads(response.text)
-
-                    latitude = soup['merchant']['latlng']['latitude']
-                    longitude = soup['merchant']['latlng']['longitude']
-                    eta = soup['merchant']['ETA']
-                    estimatedDeliveryFee = soup['merchant']['estimatedDeliveryFee']
-
+                if api_response.status_code == 200:
+                    data = json.loads(api_response.text)
+                    latitude = data['merchant']['latlng']['latitude']
+                    longitude = data['merchant']['latlng']['longitude']
+                    eta_value = data['merchant']['ETA']
+                    delivery_fee = data['merchant']['estimatedDeliveryFee']
                 else:
-                    latitude = "couldnt get lat"
-                    longitude = "coudnt get long"
+                    latitude = "N/A"
+                    longitude = "N/A"
 
                 try:
-                    promo_element = restaurant_element.find_element(
-                        By.CSS_SELECTOR, "p.promoText___2LmzI")
+                    promo_elem = restaurant.find_element(By.CSS_SELECTOR, "p.promoText___2LmzI")
                     promo_available = "True"
                 except NoSuchElementException:
                     promo_available = "False"
 
                 try:
-                    offers_element = restaurant_element.find_element(
-                        By.CSS_SELECTOR, "span.discountText___GQCkj")
-                    offers = offers_element.text
+                    discount_elem = restaurant.find_element(By.CSS_SELECTOR, "span.discountText___GQCkj")
+                    discount_info = discount_elem.text
                 except NoSuchElementException:
-                    offers = "No discount"
+                    discount_info = "No discount"
 
                 try:
-                    notice_element = restaurant_element.find_element(
-                        By.CSS_SELECTOR, "p.closeSoon___1eGf8")
-                    notice = notice_element.text
+                    notice_elem = restaurant.find_element(By.CSS_SELECTOR, "p.closeSoon___1eGf8")
+                    promo_notice = notice_elem.text
                 except NoSuchElementException:
-                    notice = "No promo"
+                    promo_notice = "No promo"
 
                 restaurant_dict = {
                     "Restaurant Id": restaurant_id,
                     "Restaurant Name": restaurant_name,
-                    "Cuisine": restaurant_cuisine,
-                    "Rating": rating,
-                    "Duration": duration_distance,
+                    "Cuisine": cuisine_type,
+                    "Rating": rating_value,
+                    "Duration": duration_dist,
                     "Promo": promo_available,
-                    "restaurant_id": restaurant_id,
-                    "offers": offers,
-                    "notice": notice,
-                    "image_url": image_url,
-                    "latitude": latitude,
-                    "longitude": longitude,
-                    "Estimate time of delivery": eta,
-                    "Estimated Delivery Fee": estimatedDeliveryFee
+                    "Offers": discount_info,
+                    "Notice": promo_notice,
+                    "Image URL": image_src,
+                    "Latitude": latitude,
+                    "Longitude": longitude,
+                    "ETA": eta_value,
+                    "Estimated Delivery Fee": delivery_fee
                 }
 
-                restaurant_data.append(restaurant_dict)
+                restaurant_info.append(restaurant_dict)
 
             except NoSuchElementException:
                 continue
 
     with gzip.open(f"restaurant_data_{multiprocessing.current_process().name}.ndjson.gz", "wt", encoding="utf-8") as f:
-        for data in restaurant_data:
+        for data in restaurant_info:
             json.dump(data, f)
             f.write('\n')
 
     time.sleep(20)
 
-def scrape(cookies):
+def run_scraping(browser_cookies):
 
     service = Service()
     options = webdriver.ChromeOptions()
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("--disable-extensions")
 
-    bot = webdriver.Chrome(service=service, options=options)
+    driver = webdriver.Chrome(service=service, options=options)
+    
+    scrape_restaurants(driver, browser_cookies)
 
-    search(bot, cookies)
+    driver.quit()
 
-    bot.quit()
+def initialize_process():
 
-
-def start_process():
-
-    cookies_list = [{
+    cookies_set = [{
         "gfc_country": "SG",
         "gfc_session_guid": "694226c1-b9c1-4b47-89a7-0d98fc4abe21",
         "next-i18next": "en",
@@ -161,7 +144,7 @@ def start_process():
         "_gssid": "2404151150-xial46y7nxr",
         "_ga_RPEHNJMMEM": "GS1.1.1715773927.6.0.1715773927.60.0.995007504"
     },
-        {
+    {
         "gfc_country": "SG",
         "gfc_session_guid": "694226c1-b9c1-4b47-89a7-0d98fc4abe21",
         "next-i18next": "en",
@@ -177,9 +160,9 @@ def start_process():
         "_ga_RPEHNJMMEM": "GS1.1.1715800156.7.1.1715800314.54.0.1428779389"
     }]
     processes = []
-    for idx, cookies in enumerate(cookies_list, start=1):
+    for idx, cookies in enumerate(cookies_set, start=1):
         process = multiprocessing.Process(
-            target=scrape, args=(cookies,), name=f"Process-{idx}")
+            target=run_scraping, args=(cookies,), name=f"Process-{idx}")
         processes.append(process)
 
     for process in processes:
@@ -191,6 +174,4 @@ def start_process():
 
 if __name__ == '__main__':
     TIMEOUT = 600
-    start_process()
-
-
+    initialize_process()
